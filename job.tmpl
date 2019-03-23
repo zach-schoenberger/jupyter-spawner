@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{.JobName}}
+  lables:
+    jhub: notebookTester
+    jhubUser: {{.UserId}}
+    jhubRequestId: {{.RequestId}}
+spec:
+  template:
+    spec:
+      containers:
+        - name: {{.JobName}}
+          image: {{.Image}}
+          command: ["python", "/home/jovyan/config/pyScript.py"]
+          env:
+            name: REQUEST_ID
+            value: {{.RequestId}}
+          volumeMounts:
+            - name: config
+              mountPath: "/home/jovyan/config"
+              readOnly: true
+          resources:
+            limits:
+              cpu: 10m
+              memory: 20Mi
+      restartPolicy: OnFailure
+      volumes:
+        - name: config
+          configMap:
+            name: {{.PyScriptHash}}
+  backoffLimit: 1

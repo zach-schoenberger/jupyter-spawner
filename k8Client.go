@@ -1,0 +1,84 @@
+package main
+
+import (
+	"bytes"
+	"flag"
+	"k8s.io/api/batch/v1"
+	v12 "k8s.io/api/core/v1"
+	v13 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/kubernetes"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/tools/clientcmd"
+	"os"
+	"path/filepath"
+)
+
+type K8Client struct {
+	cs *kubernetes.Clientset
+	ns string
+}
+
+type ConfigMapFile struct {
+	Name string
+	Data []byte
+}
+
+type K8ClientI interface {
+	StartJob(cs *kubernetes.Clientset, job []byte) (*v1.Job, error)
+	PutScriptAsConfigMap(cs *kubernetes.Clientset, pyScriptHash string, pyScript []byte) (*v12.ConfigMap, error)
+}
+
+func ConnectToK8() *K8Client {
+	var kubeconfig *string
+	if home := homeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	flag.Parse()
+
+	// use the current context in kubeconfig
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// create the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+	return &K8Client{cs: clientset, ns: "jhub"}
+}
+
+func (cs *K8Client) StartJob(job []byte) (*v1.Job, error) {
+	k8Job := v1.Job{}
+	jobReader := bytes.NewReader(job)
+	if err := yaml.NewYAMLOrJSONDecoder(jobReader, 4096).Decode(&k8Job); err != nil {
+		return nil, err
+	}
+	return cs.cs.BatchV1().Jobs(cs.ns).Create(&k8Job)
+}
+
+func (cs *K8Client) PutConfigMap(name string, files []ConfigMapFile) (*v12.ConfigMap, error) {
+	k8ConfigMap := v12.ConfigMap{}
+	k8ConfigMap.Name = name
+	k8ConfigMap.BinaryData = make(map[string][]byte)
+	for _, f := range files {
+		k8ConfigMap.BinaryData[f.Name] = f.Data
+	}
+	deletePolicy := v13.DeletePropagationForeground
+	deleteOptions := v13.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	}
+	_ = cs.cs.CoreV1().ConfigMaps(cs.ns).Delete(name, &deleteOptions)
+	return cs.cs.CoreV1().ConfigMaps(cs.ns).Create(&k8ConfigMap)
+}
+
+func homeDir() string {
+	if h := os.Getenv("HOME"); h != "" {
+		return h
+	}
+	return os.Getenv("USERPROFILE") // windows
+}

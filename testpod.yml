@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: 2f952c4e-4db0-11e9-a6a2-9801a7947f43
+  namespace: jhub
+  labels:
+    jhub: notebookTest
+    jhubUser: zach
+    jhubRequestId: 2f952c4e-4db0-11e9-a6a2-9801a7947f43
+spec:
+  containers:
+    - name: 2f952c4e-4db0-11e9-a6a2-9801a7947f43
+      image: jupyter/pyspark-notebook:latest
+      command: ["sh", "-c", "tail -f /dev/null"]
+      volumeMounts:
+        - name: config
+          mountPath: "/home/jovyan//config"
+          readOnly: true
+      resources:
+        limits:
+          cpu: 10m
+          memory: 20Mi
+  restartPolicy: Never
+  volumes:
+    - name: config
+      configMap:
+        name: d38cd6d54bdf0985a22b0bcda51b4a11a116194d073365bd15eb5ef0635412ad

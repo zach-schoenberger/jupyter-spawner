@@ -1,0 +1,8 @@
+FROM jupyter/pyspark-notebook:latest
+USER root
+RUN apt-get update
+RUN apt-get install jq -y
+RUN mkdir -p /home/jovyan/bin
+ADD runPyscript.sh /home/jovyan/bin
+
+CMD ["/bin/bash", "/home/jovyan/bin/runPyscript.sh"]
