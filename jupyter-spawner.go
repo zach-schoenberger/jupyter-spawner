@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/pborman/uuid"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"html/template"
@@ -15,36 +16,23 @@ import (
 	"runtime"
 )
 
-type QueryParams struct {
-	UserId          string `form:"uid" binding:"required"`
-	UserAddress     string `form:"adr" binding:"required"`
-	UserAddressPort int    `form:"prt" binding:"required"`
-	Force           bool   `form:"frc"`
+type stackTracer interface {
+	StackTrace() errors.StackTrace
 }
 
-type PostData struct {
-	PythonScript []byte `form:"pyscript" binding:"required"`
-}
+func dumpErr(e error, depth int) {
+	l.Errorf("%s\n", e.Error())
+	err, ok := e.(stackTracer)
+	if !ok {
+		panic("oops, err does not implement stackTracer")
+	}
 
-type RunNotebookResponse struct {
-	RequestId    string  `json:"requestId"`
-	PyscriptHash string  `json:"pyscriptHash"`
-	Status       *string `json:"status,omitempty"`
-	Error        *string `json:"error,omitempty"`
-	Result       *string `json:"result,omitempty"`
+	st := err.StackTrace()
+	if depth == 0 {
+		depth = len(st) - 1
+	}
+	l.Errorf("%+v", st[0:depth])
 }
-
-type TemplateData struct {
-	JobName      string
-	Image        string
-	PyScriptHash string
-	UserId       string
-	RequestId    string
-}
-
-var ERROR_STATUS = "ERROR"
-var RUNNING_STATUS = "RUNNING"
-var FINISHED_STATUS = "FINISHED"
 
 var runCache RunCache
 var redisConfig *RedisConfig
@@ -52,7 +40,7 @@ var k8Client *K8Client
 var l = logrus.New()
 var lw = l.Writer()
 
-var imageName = "jhub-spawner/tester:1.0"
+var imageName = "zschoenb/jhub-tester:1.0"
 var jobTemplateFile = "./job.tmpl"
 var jobTemplate *template.Template
 
@@ -96,83 +84,103 @@ func main() {
 	g := gin.New()
 	g.Use(gin.LoggerWithWriter(lw), gin.Recovery())
 	g.POST("/notebook/run", postRunNotebook)
-	//g.POST("/notebook/result/:requestId", postRunNotebook)
+	g.GET("/notebook/end/:requestId", getNotebookResult)
 
 	if err := g.Run(fmt.Sprintf(":%d", appConfig.Port)); err != nil {
 		_ = fmt.Errorf(err.Error())
 	}
 }
 
+func getSha(data *PostData) string {
+	sha := sha256.Sum256(data.PythonScript)
+	postHash := fmt.Sprintf("%x", sha)
+	return postHash
+}
+
 func postRunNotebook(c *gin.Context) {
 	c.JSON(processRunNotebook(c))
 }
 
-func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
-	requestId := uuid.NewUUID()
-	queryParams := new(QueryParams)
-	if err := c.Bind(queryParams); err != nil {
-		e := err.Error()
-		return http.StatusBadRequest, RunNotebookResponse{
-			RequestId: requestId.String(),
-			Error:     &e,
-			Status:    &ERROR_STATUS}
+func getNotebookResult(c *gin.Context) {
+	c.JSON(getResult(c))
+}
+
+func getRunRequest(c *gin.Context, requestId string) (*RunNotebookRequest, error) {
+	runRequest := RunNotebookRequest{nil, nil, "", ""}
+	qp := QueryParams{}
+	runRequest.QueryParams = &qp
+	if err := c.BindQuery(&qp); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	postData, err := getPostData(c)
 	if err != nil {
-		e := err.Error()
-		return http.StatusBadRequest, RunNotebookResponse{
-			RequestId: requestId.String(),
-			Error:     &e,
-			Status:    &ERROR_STATUS}
+		return nil, errors.WithStack(err)
 	}
 
-	sha := sha256.Sum256(postData.PythonScript)
-	postHash := fmt.Sprintf("%x", sha)
+	postData.PythonScript, err = processScript(requestId, postData.PythonScript)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
 
-	isRunNotebook, err := runCache.Set(postHash, requestId.String())
+	runRequest.PostData = postData
+	runRequest.PostHash = getSha(postData)
+	return &runRequest, nil
+}
+
+func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
+	requestId := uuid.NewUUID().String()
+	runRequest, err := getRunRequest(c, requestId)
+	if err != nil {
+		e := err.Error()
+		l.Errorln(e)
+		return http.StatusBadRequest, RunNotebookResponse{
+			RequestId: requestId,
+			Error:     &e,
+			Status:    ErrorStatus.pointer()}
+	}
+
+	isRunNotebook, err := runCache.Set(runRequest.PostHash, requestId)
 	if err != nil {
 		serverError := fmt.Errorf("Failed to write to cache: %s\n", err)
 		l.Errorln(serverError)
 		e := serverError.Error()
 		return http.StatusInternalServerError, RunNotebookResponse{
-			RequestId:    requestId.String(),
-			PyscriptHash: postHash,
+			RequestId:    requestId,
+			PyscriptHash: runRequest.PostHash,
 			Error:        &e,
-			Status:       &ERROR_STATUS}
+			Status:       ErrorStatus.pointer()}
 	}
 
-	if isRunNotebook || queryParams.Force == true {
-		_, err := runNotebook(queryParams, requestId.String(), postHash, postData)
-		if err != nil {
-			serverError := fmt.Errorf("Failed to run notebook: %s\n", err)
-			l.Errorln(serverError.Error())
-			e := serverError.Error()
+	if isRunNotebook || runRequest.QueryParams.Force == true {
+		if err := runNotebook(runRequest.QueryParams, requestId, runRequest.PostHash, runRequest.PostData); err != nil {
+			dumpErr(err, 0)
+			e := err.Error()
 			return http.StatusInternalServerError, RunNotebookResponse{
-				RequestId:    requestId.String(),
-				PyscriptHash: postHash,
+				RequestId:    requestId,
+				PyscriptHash: runRequest.PostHash,
 				Error:        &e,
-				Status:       &ERROR_STATUS}
+				Status:       ErrorStatus.pointer()}
 		}
 		return http.StatusOK, RunNotebookResponse{
-			RequestId:    requestId.String(),
-			PyscriptHash: postHash,
-			Status:       &RUNNING_STATUS}
+			RequestId:    requestId,
+			PyscriptHash: runRequest.PostHash,
+			Status:       RunningStatus.pointer()}
 	} else {
-		if result, err := runCache.Get(postHash); err != nil {
+		if result, err := runCache.Get(runRequest.PostHash); err != nil {
 			serverError := fmt.Errorf("Failed to read from cache: %s\n", err)
 			l.Errorln(serverError.Error())
 			e := serverError.Error()
 			return http.StatusInternalServerError, RunNotebookResponse{
-				RequestId:    requestId.String(),
-				PyscriptHash: postHash,
+				RequestId:    requestId,
+				PyscriptHash: runRequest.PostHash,
 				Error:        &e,
-				Status:       &ERROR_STATUS}
+				Status:       ErrorStatus.pointer()}
 		} else {
 			return http.StatusOK, RunNotebookResponse{
-				RequestId:    requestId.String(),
-				PyscriptHash: postHash,
-				Status:       &FINISHED_STATUS,
+				RequestId:    requestId,
+				PyscriptHash: runRequest.PostHash,
+				Status:       FinishedStatus.pointer(),
 				Result:       &result}
 		}
 	}
@@ -180,21 +188,26 @@ func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
 
 func getPostData(c *gin.Context) (*PostData, error) {
 	postData := new(PostData)
-	if fh, err := c.FormFile("pyscript"); err != nil || fh == nil {
-		if c.Bind(postData) != nil {
-			return nil, fmt.Errorf("missing pyscript")
-		}
-	} else {
-		if f, err := fh.Open(); err != nil {
-			return nil, fmt.Errorf("could not read pyscript")
-		} else {
-			postData.PythonScript, _ = ioutil.ReadAll(f)
-		}
+	rb, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, err
 	}
+	postData.PythonScript = rb
+	//if fh, err := c.FormFile("pyscript"); err != nil || fh == nil {
+	//	if err := c.ShouldBind(postData); err != nil {
+	//		return nil, errors.Errorf("missing pyscript")
+	//	}
+	//} else {
+	//	if f, err := fh.Open(); err != nil {
+	//		return nil, errors.Errorf("could not read pyscript")
+	//	} else {
+	//		postData.PythonScript, _ = ioutil.ReadAll(f)
+	//	}
+	//}
 	return postData, nil
 }
 
-func runNotebook(params *QueryParams, requestId string, pyScriptHash string, data *PostData) (string, error) {
+func runNotebook(params *QueryParams, requestId string, pyScriptHash string, data *PostData) error {
 	//var buf = bytes.NewBuffer(make([]byte, 4096))
 	buf := &bytes.Buffer{}
 	var templateData = TemplateData{
@@ -205,22 +218,45 @@ func runNotebook(params *QueryParams, requestId string, pyScriptHash string, dat
 		RequestId:    requestId,
 	}
 	if err := jobTemplate.Execute(buf, templateData); err != nil {
-		return "", err
+		return errors.WithStack(err)
 	}
 	l.Debugf("Job definition: %s\n", buf)
 	configMap := make([]ConfigMapFile, 2)
-	configMap[0] = ConfigMapFile{Name: "pyScript.py", Data: data.PythonScript}
+	configMap[0] = ConfigMapFile{Name: "pyScript.pyc", Data: data.PythonScript}
 	paramBytes, err := json.Marshal(params)
 	if err != nil {
-		return "", err
+		return errors.WithStack(err)
 	}
 	configMap[1] = ConfigMapFile{Name: "params.json", Data: paramBytes}
 
 	if _, err := k8Client.PutConfigMap(pyScriptHash, configMap); err != nil {
-		return "", err
+		return errors.WithStack(err)
 	}
 	if _, err := k8Client.StartJob(buf.Bytes()); err != nil {
-		return "", err
+		return err
 	}
-	return "", nil
+	return nil
+}
+
+func getResult(c *gin.Context) (int, ResultResponse) {
+	resultRequest := new(ResultRequest)
+	if err := c.Bind(resultRequest); err != nil {
+		e := err.Error()
+		return http.StatusBadRequest, ResultResponse{
+			Error:  &e,
+			Status: ErrorStatus}
+	}
+
+	if result, err := runCache.Get(resultRequest.RequestId); err != nil {
+		e := err.Error()
+		l.Errorln(e)
+		return http.StatusBadRequest, ResultResponse{
+			Error:  &e,
+			Status: ErrorStatus}
+	} else {
+		return http.StatusOK, ResultResponse{
+			Result: &result,
+			Status: FinishedStatus,
+		}
+	}
 }

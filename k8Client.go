@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"github.com/pkg/errors"
 	"k8s.io/api/batch/v1"
 	v12 "k8s.io/api/core/v1"
 	v13 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,9 +57,13 @@ func (cs *K8Client) StartJob(job []byte) (*v1.Job, error) {
 	k8Job := v1.Job{}
 	jobReader := bytes.NewReader(job)
 	if err := yaml.NewYAMLOrJSONDecoder(jobReader, 4096).Decode(&k8Job); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
-	return cs.cs.BatchV1().Jobs(cs.ns).Create(&k8Job)
+	if j, err := cs.cs.BatchV1().Jobs(cs.ns).Create(&k8Job); err != nil {
+		return nil, errors.WithStack(err)
+	} else {
+		return j, err
+	}
 }
 
 func (cs *K8Client) PutConfigMap(name string, files []ConfigMapFile) (*v12.ConfigMap, error) {

@@ -1,3 +1,4 @@
 #!/bin/bash
 
-docker build -t jhub-spawner/tester:1.0 .
+docker build -t zschoenb/jhub-tester:1.0 .
+docker push zschoenb/jhub-tester:1.0

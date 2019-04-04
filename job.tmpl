@@ -12,10 +12,10 @@ spec:
       containers:
         - name: {{.JobName}}
           image: {{.Image}}
-          command: ["python", "/home/jovyan/config/pyScript.py"]
+          command: ["python", "/home/jovyan/config/pyScript.pyc"]
           env:
-            name: REQUEST_ID
-            value: {{.RequestId}}
+            - name: REQUEST_ID
+              value: {{.RequestId}}
           volumeMounts:
             - name: config
               mountPath: "/home/jovyan/config"

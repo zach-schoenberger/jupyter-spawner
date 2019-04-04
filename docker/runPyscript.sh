@@ -6,7 +6,7 @@ for s in $(cat /home/jovyan/config/params.json | jq -r "to_entries|map(\"\(.key)
     export ${s}
 done
 
-python /home/jovyan/config/pyScript.py $@
+python /home/jovyan/config/pyScript.pyc $@
 
 if [[ "$?" -eq "1" ]]; then
     curl http://jupyter-spawner/notebook/end/${REQUEST_ID}
