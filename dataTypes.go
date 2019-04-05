@@ -41,7 +41,7 @@ type ResultResponse struct {
 }
 
 type ResultRequest struct {
-	RequestId string `json:"requestId"`
+	RequestId string `uri:"requestId"`
 }
 
 type ResponseStatus string

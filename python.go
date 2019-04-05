@@ -27,7 +27,7 @@ func compile(filename string) ([]byte, error) {
 }
 
 func readFile(filename string) ([]byte, error) {
-	return ioutil.ReadFile(filename)
+	return ioutil.ReadFile(getFullFileName(filename))
 }
 
 func runCommand(cmd *exec.Cmd) ([]byte, error) {
@@ -48,7 +48,11 @@ func processScript(requestId string, data []byte) ([]byte, error) {
 	if rb, err = convertScript(requestId + ".ipynb"); err != nil {
 		return nil, errors.WithStack(err)
 	}
-	if rb, err = compile(requestId + ".py"); err != nil {
+	//if rb, err = compile(requestId + ".py"); err != nil {
+	//	return nil, errors.WithStack(err)
+	//}
+
+	if rb, err = readFile(requestId + ".py"); err != nil {
 		return nil, errors.WithStack(err)
 	}
 	_ = deleteFile(requestId + ".ipynb")

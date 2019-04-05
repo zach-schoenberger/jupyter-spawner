@@ -6,10 +6,10 @@ for s in $(cat /home/jovyan/config/params.json | jq -r "to_entries|map(\"\(.key)
     export ${s}
 done
 
-python /home/jovyan/config/pyScript.pyc $@
+python /home/jovyan/config/pyScript.pyc $@ > /home/jovyan/pyscript.log &>1
 
 if [[ "$?" -eq "1" ]]; then
-    curl http://jupyter-spawner/notebook/end/${REQUEST_ID}
+    curl -X POST http://jupyter-spawner/notebook/end/${REQUEST_ID} -d "@/home/jovyan/pyscript.log"
 fi
 
 exit 0

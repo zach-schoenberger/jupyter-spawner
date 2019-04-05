@@ -26,7 +26,17 @@ func NewRedisCache(redisConfig RedisConfig) *RedisCache {
 }
 
 func (c *RedisCache) Set(key string, value string) (bool, error) {
-	return c.rc.SetNX(key, value, time.Minute*c.config.TTL).Result()
+	if wasSet, err := c.rc.SetNX(key, value, time.Minute*c.config.TTL).Result(); err != nil {
+		return false, err
+	} else {
+		if !wasSet {
+			if _, err := c.rc.Set(key, value, time.Minute*c.config.TTL).Result(); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *RedisCache) Get(key string) (string, error) {
