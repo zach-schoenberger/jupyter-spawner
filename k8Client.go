@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"github.com/pkg/errors"
 	"k8s.io/api/batch/v1"
 	v12 "k8s.io/api/core/v1"
@@ -10,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"path/filepath"
@@ -32,17 +34,26 @@ type K8ClientI interface {
 
 func ConnectToK8() *K8Client {
 	var kubeconfig *string
-	if home := homeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
+	var config *rest.Config
 
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
+	if c, err := rest.InClusterConfig(); err != nil {
+		fmt.Println(fmt.Errorf("no internal-cluster config found: %s", err.Error()))
+		if home := homeDir(); home != "" {
+			kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		} else {
+			kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+		}
+		flag.Parse()
+
+		// use the current context in kubeconfig
+		c, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+		if err != nil {
+			fmt.Println(fmt.Errorf("no external-cluster config found: %s", err.Error()))
+			panic(fmt.Errorf("no cluster config found"))
+		}
+		config = c
+	} else {
+		config = c
 	}
 
 	// create the clientset
