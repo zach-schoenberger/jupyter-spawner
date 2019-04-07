@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/spf13/viper"
+	"os"
 	"time"
 )
 
@@ -28,4 +29,12 @@ func getConfig(subKey string, config interface{}) error {
 		}
 	}
 	return nil
+}
+
+func getEnvValue(key string, def string) string {
+	value, found := os.LookupEnv(key)
+	if !found {
+		return def
+	}
+	return value
 }

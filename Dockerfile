@@ -2,6 +2,10 @@
 FROM golang:1.11
 LABEL maintainer="Zach Schoenberger <zschoenb@gmail.com>"
 
+RUN apt-get update -y && apt-get upgrade -y
+RUN apt-get install -y python3 ipython python3-pip
+RUN pip3 install jupyter
+
 WORKDIR $GOPATH/src/github.com/zach-schoenberger/jupyter-spawner
 ENV GO111MODULE=on
 COPY go.mod .
@@ -11,6 +15,6 @@ RUN go mod download
 COPY . .
 RUN go install -v ./...
 
-EXPOSE 8080
+EXPOSE 8888
 
 CMD ["jupyter-spawner"]

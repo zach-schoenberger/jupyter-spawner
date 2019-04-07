@@ -9,10 +9,12 @@ metadata:
 spec:
   template:
     spec:
+      ttlSecondsAfterFinished: 300
       containers:
         - name: {{.JobName}}
           image: {{.Image}}
-          command: ["python", "/home/jovyan/config/pyScript.pyc"]
+          imagePullPolicy: Always
+          command: ["/bin/bash", "/home/jovyan/bin/runPyscript.sh"]
           env:
             - name: REQUEST_ID
               value: {{.RequestId}}
@@ -21,9 +23,12 @@ spec:
               mountPath: "/home/jovyan/config"
               readOnly: true
           resources:
-            limits:
+            requests:
               cpu: 10m
               memory: 20Mi
+            limits:
+              cpu: 100m
+              memory: 1Gi
       restartPolicy: OnFailure
       volumes:
         - name: config

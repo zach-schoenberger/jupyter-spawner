@@ -7,12 +7,13 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/api/batch/v1"
 	v12 "k8s.io/api/core/v1"
-	v13 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/retry"
 	"os"
 	"path/filepath"
 )
@@ -73,7 +74,7 @@ func (cs *K8Client) StartJob(job []byte) (*v1.Job, error) {
 	if j, err := cs.cs.BatchV1().Jobs(cs.ns).Create(&k8Job); err != nil {
 		return nil, errors.WithStack(err)
 	} else {
-		return j, err
+		return j, nil
 	}
 }
 
@@ -84,12 +85,26 @@ func (cs *K8Client) PutConfigMap(name string, files []ConfigMapFile) (*v12.Confi
 	for _, f := range files {
 		k8ConfigMap.BinaryData[f.Name] = f.Data
 	}
-	deletePolicy := v13.DeletePropagationForeground
-	deleteOptions := v13.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
+
+	_, err := cs.cs.CoreV1().ConfigMaps(cs.ns).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return cs.cs.CoreV1().ConfigMaps(cs.ns).Create(&k8ConfigMap)
+	} else {
+		return cs.updateConfigMap(name, &k8ConfigMap)
 	}
-	_ = cs.cs.CoreV1().ConfigMaps(cs.ns).Delete(name, &deleteOptions)
-	return cs.cs.CoreV1().ConfigMaps(cs.ns).Create(&k8ConfigMap)
+}
+
+func (cs *K8Client) updateConfigMap(name string, configMap *v12.ConfigMap) (*v12.ConfigMap, error) {
+	var cm *v12.ConfigMap
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var updateErr error
+		cm, updateErr = cs.cs.CoreV1().ConfigMaps(cs.ns).Update(configMap)
+		return errors.WithStack(updateErr)
+	})
+	if retryErr != nil {
+		return nil, errors.WithStack(retryErr)
+	}
+	return cm, nil
 }
 
 func homeDir() string {

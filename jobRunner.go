@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/pborman/uuid"
@@ -15,7 +16,7 @@ func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
 	runRequest, err := getRunRequest(c, requestId)
 	if err != nil {
 		e := err.Error()
-		l.Errorln(e)
+		dumpErr(err, 0)
 		return http.StatusBadRequest, RunNotebookResponse{
 			RequestId: requestId,
 			Error:     &e,
@@ -39,7 +40,7 @@ func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
 			PyscriptHash: runRequest.PostHash,
 			Status:       RunningStatus.pointer()}
 	} else {
-		if runRequestId, result, err := getRunResults(runRequest); err != nil {
+		if runRequestId, status, result, err := getRunResults(runRequest); err != nil {
 			dumpErr(err, 0)
 			e := err.Error()
 			return http.StatusInternalServerError, RunNotebookResponse{
@@ -51,7 +52,7 @@ func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
 			return http.StatusOK, RunNotebookResponse{
 				RequestId:    runRequestId,
 				PyscriptHash: runRequest.PostHash,
-				Status:       FinishedStatus.pointer(),
+				Status:       &status,
 				Result:       &result}
 		}
 	}
@@ -72,7 +73,7 @@ func getRunRequest(c *gin.Context, requestId string) (*RunNotebookRequest, error
 
 	postData.PythonScript, err = processScript(requestId, postData.PythonScript)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
 
 	runRequest.PostData = postData
@@ -93,9 +94,9 @@ func runNotebook(params *QueryParams, requestId string, pyScriptHash string, dat
 	if err := jobTemplate.Execute(buf, templateData); err != nil {
 		return errors.WithStack(err)
 	}
-	l.Debugf("Job definition: %s\n", buf)
+	log.Debugf("Job definition: %s\n", buf)
 	configMap := make([]ConfigMapFile, 2)
-	configMap[0] = ConfigMapFile{Name: "pyScript.pyc", Data: data.PythonScript}
+	configMap[0] = ConfigMapFile{Name: "pyScript.py", Data: data.PythonScript}
 	paramBytes, err := json.Marshal(params)
 	if err != nil {
 		return errors.WithStack(err)
@@ -103,7 +104,7 @@ func runNotebook(params *QueryParams, requestId string, pyScriptHash string, dat
 	configMap[1] = ConfigMapFile{Name: "params.json", Data: paramBytes}
 
 	if _, err := k8Client.PutConfigMap(pyScriptHash, configMap); err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 	if _, err := k8Client.StartJob(buf.Bytes()); err != nil {
 		return err
@@ -129,14 +130,17 @@ func validateRunRequest(requestId string, runRequest *RunNotebookRequest) bool {
 }
 
 func addRunToCache(requestId string, runRequest *RunNotebookRequest) bool {
-	_, err := runCache.Set(runRequest.PostHash, requestId)
-	if err != nil {
-		serverError := errors.Wrap(err, "Failed to write to cache")
-		dumpErr(serverError, 0)
-		return false
-	}
+	var ret = true
+	qp, _ := json.Marshal(*runRequest.QueryParams)
+	ret = ret && writeToCache(fmt.Sprintf("%s::%s", requestId, "params"), string(qp))
+	ret = ret && writeToCache(runRequest.PostHash, requestId)
+	ret = ret && writeToCache(fmt.Sprintf("%s::%s", requestId, "status"), string(RunningStatus))
+	return ret
+}
 
-	if _, err := runCache.Set(requestId, string(RunningStatus)); err != nil {
+func writeToCache(key string, value string) bool {
+	_, err := runCache.Set(key, value)
+	if err != nil {
 		serverError := errors.Wrap(err, "Failed to write to cache")
 		dumpErr(serverError, 0)
 		return false

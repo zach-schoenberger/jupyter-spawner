@@ -1,5 +1,11 @@
 package main
 
+import "fmt"
+
+type Str struct {
+	string
+}
+
 type QueryParams struct {
 	UserId          string `form:"uid" binding:"required"`
 	UserAddress     string `form:"adr" binding:"required"`
@@ -54,4 +60,29 @@ const (
 
 func (r ResponseStatus) pointer() *ResponseStatus {
 	return &r
+}
+
+func (r *RunNotebookResponse) String() string {
+	return fmt.Sprintf("{RequestId:%s, PyscriptHash:%s, Status:%s, Result:%s, Error:%s}", r.RequestId, r.PyscriptHash, r.Status, String(r.Result), String(r.Error))
+}
+
+func String(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func (s *Str) String() string {
+	if s == nil {
+		return "nil"
+	}
+	return s.string
+}
+
+func (r *ResponseStatus) String() string {
+	if r == nil {
+		return ""
+	}
+	return string(*r)
 }
