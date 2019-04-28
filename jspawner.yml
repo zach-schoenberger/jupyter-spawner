@@ -10,4 +10,3 @@ redis:
     Password: VRzmSW0tfC
     DB: 0
     TTL: 1440
-

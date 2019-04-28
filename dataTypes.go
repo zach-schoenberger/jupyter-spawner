@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type Str struct {
@@ -66,8 +67,7 @@ func (r ResponseStatus) pointer() *ResponseStatus {
 }
 
 func (r *RunNotebookResponse) String() string {
-	s, _ := json.Marshal(*r)
-	return string(s)
+	return fmt.Sprintf("{RequestId:%s, PyscriptHash:%s, Status:%s, Result:%s, Error:%s}", r.RequestId, r.PyscriptHash, r.Status, String(r.Result), String(r.Error))
 }
 
 func (r *RunNotebookRequest) String() string {

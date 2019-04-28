@@ -10,4 +10,4 @@ fi
 
 FILE=$1
 
-kubectl --namespace jhub2 create configmap assessor --from-literal pyScriptAssessor.py=$( cat ${FILE} | base64 )
+kubectl --namespace jhub2 create configmap assessor --from-literal pyScriptAssessor.py="$( cat ${FILE} )"
