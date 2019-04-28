@@ -18,9 +18,10 @@ type RedisCache struct {
 func NewRedisCache(redisConfig RedisConfig) *RedisCache {
 	rc := redis.NewClient(&redis.Options{
 		Addr:     redisConfig.Addr,
-		Password: redisConfig.Password,
+		Password: getEnvValue("REDIS_PASSWORD", redisConfig.Password),
 		DB:       redisConfig.DB,
 	})
+
 	return &RedisCache{rc: rc,
 		config: redisConfig}
 }

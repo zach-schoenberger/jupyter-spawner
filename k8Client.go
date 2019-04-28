@@ -28,7 +28,7 @@ type ConfigMapFile struct {
 	Data []byte
 }
 
-func ConnectToK8() *K8Client {
+func ConnectToK8(ns string) *K8Client {
 	var kubeconfig *string
 	var config *rest.Config
 
@@ -57,7 +57,7 @@ func ConnectToK8() *K8Client {
 	if err != nil {
 		panic(err.Error())
 	}
-	return &K8Client{cs: clientset, ns: "jhub"}
+	return &K8Client{cs: clientset, ns: ns}
 }
 
 func (cs *K8Client) StartJob(job []byte) (*v1.Job, error) {

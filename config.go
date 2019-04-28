@@ -20,7 +20,8 @@ type RedisConfig struct {
 }
 
 type JobConfig struct {
-	Image string
+	Image     string
+	Namespace string
 }
 
 func getConfig(subKey string, config interface{}) error {

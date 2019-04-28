@@ -3,10 +3,11 @@ app:
     Mode: debug
 job:
     Image: "zschoenb/jhub-assessor:1.0"
+    Namespace: jhub2
 redis:
 #    Addr: 35.224.232.159:6379
-    Addr: redis-master.jhub.svc.cluster.local:6379
-    Password: 1RoW7V7TDv
+    Addr: redis-master.jhub2.svc.cluster.local:6379
+    Password: VRzmSW0tfC
     DB: 0
     TTL: 1440
 

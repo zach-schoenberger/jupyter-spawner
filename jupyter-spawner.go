@@ -69,8 +69,6 @@ func main() {
 		jobTemplate = jt
 	}
 
-	k8Client = ConnectToK8()
-
 	redisConfig = new(RedisConfig)
 	if err := getConfig("redis", redisConfig); err != nil {
 		panic(err)
@@ -81,6 +79,8 @@ func main() {
 	if err := getConfig("job", jobConfig); err != nil {
 		panic(err)
 	}
+
+	k8Client = ConnectToK8(jobConfig.Namespace)
 
 	g := gin.New()
 	g.Use(gin.LoggerWithWriter(lw), gin.Recovery())
