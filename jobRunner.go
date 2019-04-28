@@ -26,7 +26,7 @@ func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
 	isRunNotebook := validateRunRequest(requestId, runRequest)
 
 	if isRunNotebook {
-		if err := runNotebook(runRequest.QueryParams, requestId, runRequest.PostHash, runRequest.PostData); err != nil {
+		if err := runNotebook(runRequest.RunQueryParams, requestId, runRequest.PostHash, runRequest.PostData); err != nil {
 			dumpErr(err, 0)
 			e := err.Error()
 			return http.StatusInternalServerError, RunNotebookResponse{
@@ -60,8 +60,8 @@ func processRunNotebook(c *gin.Context) (int, RunNotebookResponse) {
 
 func getRunRequest(c *gin.Context, requestId string) (*RunNotebookRequest, error) {
 	runRequest := RunNotebookRequest{nil, nil, "", ""}
-	qp := QueryParams{}
-	runRequest.QueryParams = &qp
+	qp := RunQueryParams{}
+	runRequest.RunQueryParams = &qp
 	if err := c.BindQuery(&qp); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -81,12 +81,12 @@ func getRunRequest(c *gin.Context, requestId string) (*RunNotebookRequest, error
 	return &runRequest, nil
 }
 
-func runNotebook(params *QueryParams, requestId string, pyScriptHash string, data *PostData) error {
+func runNotebook(params *RunQueryParams, requestId string, pyScriptHash string, data *PostData) error {
 	//var buf = bytes.NewBuffer(make([]byte, 4096))
 	buf := &bytes.Buffer{}
 	var templateData = TemplateData{
 		JobName:      requestId,
-		Image:        imageName,
+		Image:        jobConfig.Image,
 		PyScriptHash: pyScriptHash,
 		UserId:       params.UserId,
 		RequestId:    requestId,
@@ -131,7 +131,7 @@ func validateRunRequest(requestId string, runRequest *RunNotebookRequest) bool {
 
 func addRunToCache(requestId string, runRequest *RunNotebookRequest) bool {
 	var ret = true
-	qp, _ := json.Marshal(*runRequest.QueryParams)
+	qp, _ := json.Marshal(*runRequest.RunQueryParams)
 	ret = ret && writeToCache(fmt.Sprintf("%s::%s", requestId, "params"), string(qp))
 	ret = ret && writeToCache(runRequest.PostHash, requestId)
 	ret = ret && writeToCache(fmt.Sprintf("%s::%s", requestId, "status"), string(RunningStatus))

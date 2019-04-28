@@ -14,13 +14,16 @@ spec:
         - name: {{.JobName}}
           image: {{.Image}}
           imagePullPolicy: Always
-          command: ["/bin/bash", "/home/jovyan/bin/runPyscript.sh"]
+          command: ["/bin/bash", "/home/jovyan/bin/run.sh"]
           env:
             - name: REQUEST_ID
               value: {{.RequestId}}
           volumeMounts:
-            - name: config
-              mountPath: "/home/jovyan/config"
+            - name: submission
+              mountPath: "/home/jovyan/submission"
+              readOnly: true
+            - name: assessor
+              mountPath: "/home/jovyan/assessor"
               readOnly: true
           resources:
             requests:
@@ -31,7 +34,10 @@ spec:
               memory: 1Gi
       restartPolicy: OnFailure
       volumes:
-        - name: config
+        - name: submission
           configMap:
             name: {{.PyScriptHash}}
+        - name: assessor
+          configMap:
+            name: {{.Assessor}}
   backoffLimit: 1

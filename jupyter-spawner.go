@@ -35,9 +35,9 @@ var k8Client *K8Client
 var log = logrus.New()
 var lw = log.Writer()
 
-var imageName = "zschoenb/jhub-tester:1.0"
 var jobTemplateFile = "./job.tmpl"
 var jobTemplate *template.Template
+var jobConfig *JobConfig
 
 func main() {
 	runtime.GOMAXPROCS(4)
@@ -75,8 +75,12 @@ func main() {
 	if err := getConfig("redis", redisConfig); err != nil {
 		panic(err)
 	}
-
 	runCache = NewRedisCache(*redisConfig)
+
+	jobConfig = new(JobConfig)
+	if err := getConfig("job", jobConfig); err != nil {
+		panic(err)
+	}
 
 	g := gin.New()
 	g.Use(gin.LoggerWithWriter(lw), gin.Recovery())

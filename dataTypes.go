@@ -1,15 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"encoding/json"
+)
 
 type Str struct {
 	string
 }
 
-type QueryParams struct {
+type RunQueryParams struct {
 	UserId          string `form:"uid" binding:"required"`
 	UserAddress     string `form:"adr" binding:"required"`
 	UserAddressPort int    `form:"prt" binding:"required"`
+	Assignment      string `form:"asnmt" binding:"required"`
 	Force           bool   `form:"frc"`
 }
 
@@ -18,7 +21,7 @@ type PostData struct {
 }
 
 type RunNotebookRequest struct {
-	*QueryParams
+	*RunQueryParams
 	*PostData
 	RequestId string
 	PostHash  string
@@ -63,7 +66,13 @@ func (r ResponseStatus) pointer() *ResponseStatus {
 }
 
 func (r *RunNotebookResponse) String() string {
-	return fmt.Sprintf("{RequestId:%s, PyscriptHash:%s, Status:%s, Result:%s, Error:%s}", r.RequestId, r.PyscriptHash, r.Status, String(r.Result), String(r.Error))
+	s, _ := json.Marshal(*r)
+	return string(s)
+}
+
+func (r *RunNotebookRequest) String() string {
+	s, _ := json.Marshal(*r)
+	return string(s)
 }
 
 func String(s *string) string {

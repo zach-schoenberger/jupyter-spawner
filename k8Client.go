@@ -28,11 +28,6 @@ type ConfigMapFile struct {
 	Data []byte
 }
 
-type K8ClientI interface {
-	StartJob(cs *kubernetes.Clientset, job []byte) (*v1.Job, error)
-	PutScriptAsConfigMap(cs *kubernetes.Clientset, pyScriptHash string, pyScript []byte) (*v12.ConfigMap, error)
-}
-
 func ConnectToK8() *K8Client {
 	var kubeconfig *string
 	var config *rest.Config

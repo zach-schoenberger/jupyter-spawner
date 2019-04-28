@@ -1,6 +1,8 @@
 app:
     Port: 8888
     Mode: debug
+job:
+    Image: "zschoenb/jhub-assessor:1.0"
 redis:
 #    Addr: 35.224.232.159:6379
     Addr: redis-master.jhub.svc.cluster.local:6379

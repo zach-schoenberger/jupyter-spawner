@@ -19,6 +19,10 @@ type RedisConfig struct {
 	TTL      time.Duration
 }
 
+type JobConfig struct {
+	Image string
+}
+
 func getConfig(subKey string, config interface{}) error {
 	var v *viper.Viper
 	if v = viper.Sub(subKey); v == nil {

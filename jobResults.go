@@ -31,7 +31,7 @@ func postResult(c *gin.Context) (int, ResultResponse) {
 	writeToCache(fmt.Sprintf("%s::%s", resultRequest.RequestId, "result"), string(postData.PythonScript))
 	p, err := runCache.Get(fmt.Sprintf("%s::%s", resultRequest.RequestId, "params"))
 	if err == nil {
-		params := QueryParams{}
+		params := RunQueryParams{}
 		err := json.Unmarshal([]byte(p), &params)
 		if err == nil {
 			uri := fmt.Sprintf("http://%s:%d", params.UserAddress, params.UserAddressPort)
