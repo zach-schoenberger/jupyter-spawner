@@ -6,7 +6,7 @@ job:
     Namespace: jhub2
 redis:
 #    Addr: 35.224.232.159:6379
-    Addr: redis-master.jhub2.svc.cluster.local:6379
+    Addr: redis2-master.jhub2.svc.cluster.local:6379
     Password: VRzmSW0tfC
     DB: 0
     TTL: 1440
